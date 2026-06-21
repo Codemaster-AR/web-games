@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fruit Pop: Cosmic Merge</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Matter.js Physics Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: radial-gradient(circle at center, #1e1b4b 0%, #0f172a 100%);
+            overscroll-behavior: none;
+        }
+        /* Glassmorphism elements */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glass-button {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            transition: all 0.2s ease-in-out;
+        }
+        .glass-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -10px #6366f1;
+        }
+        .glass-button:active {
+            transform: translateY(1px);
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+        }
+        /* Pulsing & animations */
+        @keyframes pulse-slow {
+            0%, 100% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.05); opacity: 1; }
+        }
+        .animate-pulse-slow {
+            animation: pulse-slow 3s infinite ease-in-out;
+        }
+        /* Sparkle animation for merge */
+        @keyframes sparkle {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        /* Canvas glowing border */
+        .game-canvas-container {
+            box-shadow: 0 0 25px rgba(99, 102, 241, 0.2);
+        }
+        /* Disable long-press context menus on mobile */
+        * {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col items-center justify-center text-white p-2 sm:p-4">
+
+    <!-- Sound Toggle & Audio context trigger overlay -->
+    <div class="absolute top-4 right-4 z-50 flex items-center gap-3">
+        <button id="soundToggleBtn" class="glass-panel p-3 rounded-full hover:bg-slate-800 transition-colors border border-indigo-500/30 flex items-center justify-center w-12 h-12">
+            <i id="soundIcon" class="fas fa-volume-up text-lg text-indigo-400"></i>
+        </button>
+    </div>
+
+    <!-- MAIN START SCREEN -->
+    <div id="startScreen" class="absolute inset-0 z-40 flex flex-col items-center justify-center bg-slate-950/90 px-6 text-center">
+        <div class="max-w-md w-full glass-panel p-8 rounded-3xl border-2 border-indigo-500/30 shadow-2xl relative overflow-hidden">
+            <div class="absolute -top-10 -left-10 w-40 h-40 bg-purple-600/20 rounded-full blur-2xl"></div>
+            <div class="absolute -bottom-10 -right-10 w-40 h-40 bg-indigo-600/20 rounded-full blur-2xl"></div>
+            
+            <div class="text-6xl mb-4 animate-bounce">🍉</div>
+            <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 mb-2">
+                FRUIT POP
+            </h1>
+            <p class="text-indigo-200 text-sm sm:text-base font-medium uppercase tracking-widest mb-6">Cosmic Merge Challenge</p>
+            
+            <p class="text-slate-300 text-sm mb-8 leading-relaxed">
+                Drop cosmic fruits into the container! Combine identical fruits to evolve them. Can you merge your way up to the ultimate colossal <span class="font-semibold text-red-400">Giant Watermelon</span>?
+            </p>
+
+            <button id="startGameBtn" class="w-full glass-button py-4 px-8 rounded-2xl font-bold text-lg tracking-wide uppercase transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg shadow-indigo-500/50">
+                Let's Pop! <i class="fas fa-play ml-2"></i>
+            </button>
+
+            <!-- Quick Tutorial Mini-Grid -->
+            <div class="mt-8 pt-6 border-t border-slate-700/50 flex justify-around items-center text-xs text-slate-400">
+                <div class="flex flex-col items-center gap-1">
+                    <span class="text-lg">🍒 + 🍒</span>
+                    <span>Combine same</span>
+                </div>
+                <div class="h-8 w-px bg-slate-700/50"></div>
+                <div class="flex flex-col items-center gap-1">
+                    <span class="text-lg">🍉</span>
+                    <span>Get Big Points</span>
+                </div>
+                <div class="h-8 w-px bg-slate-700/50"></div>
+                <div class="flex flex-col items-center gap-1">
+                    <span class="text-lg">⚠️</span>
+                    <span>Don't overflow!</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN GAME LAYOUT -->
+    <div class="w-full max-w-6xl h-full flex flex-col md:flex-row gap-4 justify-center items-center relative">
+        
+        <!-- SIDE PANEL: SCORES & NEXT PREVIEW (Left on desktop, Top on mobile) -->
+        <div class="w-full md:w-64 flex md:flex-col gap-3 justify-between md:justify-start">
+            <!-- Score Card -->
+            <div class="glass-panel flex-1 md:flex-none p-3 sm:p-4 rounded-2xl border border-slate-700/50 flex flex-col justify-center items-center shadow-lg">
+                <span class="text-xs font-semibold text-indigo-400 tracking-wider uppercase">Score</span>
+                <span id="scoreVal" class="text-3xl sm:text-4xl font-extrabold text-white mt-1">0</span>
+            </div>
+            
+            <!-- Best Score Card -->
+            <div class="glass-panel flex-1 md:flex-none p-3 sm:p-4 rounded-2xl border border-slate-700/50 flex flex-col justify-center items-center shadow-lg">
+                <span class="text-xs font-semibold text-pink-400 tracking-wider uppercase">Best Score</span>
+                <span id="highScoreVal" class="text-3xl sm:text-4xl font-extrabold text-white mt-1">0</span>
+            </div>
+
+            <!-- Next Up Box (Desktop Only side) -->
+            <div class="glass-panel hidden md:flex p-4 rounded-2xl border border-slate-700/50 flex-col items-center shadow-lg relative overflow-hidden">
+                <span class="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-3">Next Orbit</span>
+                <div id="nextFruitContainer" class="w-24 h-24 rounded-full bg-slate-900/50 flex items-center justify-center border border-indigo-500/20 relative shadow-inner">
+                    <span id="nextFruitEmoji" class="text-5xl transform hover:scale-110 transition-transform duration-300">🍒</span>
+                </div>
+                <span id="nextFruitName" class="text-xs font-bold text-indigo-300 mt-2">Cherry</span>
+            </div>
+        </div>
+
+        <!-- CENTER PANEL: GAME CANVAS CONTAINER -->
+        <div class="relative flex flex-col items-center">
+            <!-- Mobile next preview indicator overlay (shows inside main layout but above canvas) -->
+            <div class="md:hidden flex items-center gap-2 mb-2 bg-slate-800/80 px-4 py-1.5 rounded-full border border-slate-700/50">
+                <span class="text-xs font-semibold text-slate-400 uppercase">Next:</span>
+                <span id="mobileNextEmoji" class="text-xl">🍒</span>
+                <span id="mobileNextName" class="text-xs font-bold text-indigo-300">Cherry</span>
+            </div>
+
+            <!-- Game Arena Frame -->
+            <div class="game-canvas-container relative rounded-2xl overflow-hidden border-4 border-indigo-500/40 bg-slate-950/70">
+                <!-- Drop Guide indicator line -->
+                <div id="dropGuide" class="absolute top-0 bottom-0 pointer-events-none w-0.5 border-l border-dashed border-indigo-500/30" style="left: 50%;"></div>
+                
+                <!-- Danger Warning Light Line -->
+                <div id="dangerLine" class="absolute left-0 right-0 h-0.5 border-t-2 border-dashed border-red-500/50 pointer-events-none transition-all duration-300" style="top: 100px;">
+                    <span class="absolute right-2 -top-2.5 px-2 py-0.5 rounded bg-red-600 text-[10px] font-extrabold tracking-widest text-white uppercase animate-pulse">Danger</span>
+                </div>
+
+                <!-- Canvas -->
+                <canvas id="gameCanvas" width="450" height="650" class="block cursor-crosshair touch-none"></canvas>
+            </div>
+        </div>
+
+        <!-- SIDE PANEL: EVOLUTION CHAIN GUIDE (Right on desktop, Bottom on mobile) -->
+        <div class="w-full md:w-64 glass-panel p-4 rounded-2xl border border-slate-700/50 flex flex-col shadow-lg max-h-40 md:max-h-[650px] overflow-y-auto">
+            <span class="text-xs font-semibold text-indigo-400 tracking-wider uppercase mb-3 text-center md:text-left">Evolution Cosmos</span>
+            
+            <!-- Horizontal slider on mobile, vertical grid on desktop -->
+            <div class="flex md:flex-col gap-2 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 scroll-smooth">
+                <!-- Guide Items (Dynamically loaded but defined beautifully here) -->
+                <div class="flex items-center gap-3 bg-slate-900/40 px-3 py-2 rounded-xl border border-slate-800 shrink-0 md:shrink">
+                    <span class="text-2xl">🍒</span>
+                    <div class="text-xs">
+                        <p class="font-bold">Cherry</p>
+                        <p class="text-[10px] text-slate-400">Tiny Orbit</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 bg-slate-900/40 px-3 py-2 rounded-xl border border-slate-800 shrink-0 md:shrink">
+                    <span class="text-2xl">🍓</span>
+                    <div class="text-xs">
+                        <p class="font-bold">Strawberry</p>
+                        <p class="text-[10px] text-slate-400">Sweet Spark</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 bg-slate-900/40 px-3 py-2 rounded-xl border border-slate-800 shrink-0 md:shrink">
+                    <span class="text-2xl">🍇</span>
+                    <div class="text-xs">
+                        <p class="font-bold">Grape</p>
+                        <p class="text-[10px] text-slate-400">Gravity Bead</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 bg-slate-900/40 px-3 py-2 rounded-xl border border-slate-800 shrink-0 md:shrink">
+                    <span class="text-2xl">🍊</span>
+                    <div class="text-xs">
+                        <p class="font-bold">Tangerine</p>
+                        <p class="text-[10px] text-slate-400">Citrus Core</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 bg-slate-900/40 px-3 py-2 rounded-xl border border-slate-800 shrink-0 md:shrink">
+                    <span class="text-2xl">🍎</span>
+                    <div class="text-xs">
+                        <p class="font-bold">Apple</p>
+                        <p class="text-[10px] text-slate-400">Crimson Star</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 bg-slate-900/40 px-3 py-2 rounded-xl border border-slate-800 shrink-0 md:shrink">
+                    <span class="text-2xl">🍐</span>
+                    <div class="text-xs">
+                        <p class="font-bold">Pear</p>
+                        <p class="text-[10px] text-slate-400">Green Glow</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 bg-slate-900/40 px-3 py-2 rounded-xl border border-slate-800 shrink-0 md:shrink">
+                    <span class="text-2xl">🍑</span>
+                    <div class="text-xs">
+                        <p class="font-bold">Peach</p>
+                        <p class="text-[10px] text-slate-400">Fuzzy Giant</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 bg-slate-900/40 px-3 py-2 rounded-xl border border-slate-800 shrink-0 md:shrink">
+                    <span class="text-2xl">🍍</span>
+                    <div class="text-xs">
+                        <p class="font-bold">Pineapple</p>
+                        <p class="text-[10px] text-slate-400">Golden Shell</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 bg-slate-900/40 px-3 py-2 rounded-xl border border-slate-800 shrink-0 md:shrink">
+                    <span class="text-2xl">🍈</span>
+                    <div class="text-xs">
+                        <p class="font-bold">Melon</p>
+                        <p class="text-[10px] text-slate-400">Supernova</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 bg-slate-900/40 px-3 py-2 rounded-xl border border-indigo-500/30 bg-indigo-950/20 shrink-0 md:shrink">
+                    <span class="text-2xl">🍉</span>
+                    <div class="text-xs">
+                        <p class="font-bold text-red-400">Colossal Melon</p>
+                        <p class="text-[10px] text-indigo-300">Cosmic Ruler</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- GAME OVER OVERLAY SCREEN -->
+    <div id="gameOverScreen" class="absolute inset-0 z-40 hidden flex-col items-center justify-center bg-slate-950/90 px-6 text-center">
+        <div class="max-w-md w-full glass-panel p-8 rounded-3xl border-2 border-red-500/30 shadow-2xl relative overflow-hidden">
+            <div class="absolute -top-10 -left-10 w-40 h-40 bg-red-600/20 rounded-full blur-2xl"></div>
+            <div class="absolute -bottom-10 -right-10 w-40 h-40 bg-indigo-600/20 rounded-full blur-2xl"></div>
+
+            <div class="text-6xl mb-4">💥</div>
+            <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-pink-400 mb-2">
+                OVERFLOW!
+            </h2>
+            <p class="text-slate-400 text-sm mb-6 uppercase tracking-wider">The Cosmos Reached its Limit</p>
+
+            <!-- Results display -->
+            <div class="grid grid-cols-2 gap-4 mb-8">
+                <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+                    <span class="block text-xs text-slate-400 uppercase font-semibold">Your Orbit Score</span>
+                    <span id="finalScore" class="text-2xl font-extrabold text-white">0</span>
+                </div>
+                <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+                    <span class="block text-xs text-slate-400 uppercase font-semibold">Best Record</span>
+                    <span id="finalBest" class="text-2xl font-extrabold text-indigo-400">0</span>
+                </div>
+            </div>
+
+            <button id="restartGameBtn" class="w-full glass-button py-4 px-8 rounded-2xl font-bold text-lg tracking-wide uppercase transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg shadow-indigo-500/50">
+                Restart Mission <i class="fas fa-rotate ml-2"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- SOUND SYNTHESIS USING WEB AUDIO API ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let soundEnabled = true;
+
+        function playSynthSound(type, tier = 0) {
+            if (!soundEnabled) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'drop') {
+                // Low water plop sound
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'merge') {
+                // High ascending retro ding sound based on tier
+                const baseFreq = 220 + (tier * 60);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(baseFreq, now);
+                osc.frequency.exponentialRampToValueAtTime(baseFreq * 2, now + 0.2);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            } else if (type === 'gameover') {
+                // Descending retro game over chime
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.linearRampToValueAtTime(60, now + 0.8);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.8);
+                osc.start(now);
+                osc.stop(now + 0.8);
+            } else if (type === 'click') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(600, now + 0.08);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            }
+        }
+
+        // Sound Toggle Click handler
+        const soundToggleBtn = document.getElementById('soundToggleBtn');
+        const soundIcon = document.getElementById('soundIcon');
+        soundToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            soundEnabled = !soundEnabled;
+            if (soundEnabled) {
+                soundIcon.className = "fas fa-volume-up text-lg text-indigo-400";
+                playSynthSound('click');
+            } else {
+                soundIcon.className = "fas fa-volume-mute text-lg text-slate-500";
+            }
+        });
+
+        // --- GAME DESIGN AND CONFIG ---
+        const FRUITS = [
+            { id: 0, emoji: "🍒", name: "Cherry",     radius: 16,  score: 1,   color: "rgba(239, 68, 68, 0.8)",   glow: "#ef4444" },
+            { id: 1, emoji: "🍓", name: "Strawberry", radius: 24,  score: 3,   color: "rgba(244, 63, 94, 0.8)",   glow: "#f43f5e" },
+            { id: 2, emoji: "🍇", name: "Grape",      radius: 32,  score: 6,   color: "rgba(168, 85, 247, 0.8)",  glow: "#a855f7" },
+            { id: 3, emoji: "🍊", name: "Tangerine",  radius: 40,  score: 10,  color: "rgba(249, 115, 22, 0.8)",  glow: "#f97316" },
+            { id: 4, emoji: "🍎", name: "Apple",      radius: 50,  score: 15,  color: "rgba(220, 38, 38, 0.8)",   glow: "#dc2626" },
+            { id: 5, emoji: "🍐", name: "Pear",       radius: 60,  score: 21,  color: "rgba(132, 204, 22, 0.8)",  glow: "#84cc16" },
+            { id: 6, emoji: "🍑", name: "Peach",      radius: 72,  score: 28,  color: "rgba(251, 146, 60, 0.8)",  glow: "#fb923c" },
+            { id: 7, emoji: "🍍", name: "Pineapple",  radius: 84,  score: 36,  color: "rgba(234, 179, 8, 0.8)",   glow: "#eab308" },
+            { id: 8, emoji: "🍈", name: "Melon",      radius: 96,  score: 45,  color: "rgba(34, 197, 94, 0.8)",   glow: "#22c55e" },
+            { id: 9, emoji: "🍉", name: "Watermelon", radius: 110, score: 55,  color: "rgba(239, 68, 68, 0.9)",   glow: "#ef4444" }
+        ];
+
+        // --- ENGINE SETUP & VARIABLES ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const dropGuide = document.getElementById('dropGuide');
+
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('fruitPop_bestScore') || '0', 10);
+        document.getElementById('highScoreVal').innerText = highScore;
+
+        // Matter.js engine parts
+        const Engine = Matter.Engine;
+        const World = Matter.World;
+        const Bodies = Matter.Bodies;
+        const Body = Matter.Body;
+        const Composite = Matter.Composite;
+        const Events = Matter.Events;
+
+        let engine;
+        let world;
+        let runner;
+
+        // Gameplay state
+        const DANGER_Y = 100; // y limit where game overflows
+        let activeDropperX = canvas.width / 2;
+        let nextFruitIndex = 0;
+        let currentFruitIndex = 0;
+        let dropCooldown = false;
+        let gameActive = false;
+        let spawnedBodies = []; // list of fruit bodies
+        let particles = []; // cosmetic burst effects
+        let dangerTimerMap = new Map(); // tracks how long a body has crossed the danger line
+        let isGameOver = false;
+
+        // Custom bounds to ensure perfect containment
+        const wallOptions = { isStatic: true, friction: 0.1, restitution: 0.5 };
+        const groundOptions = { isStatic: true, friction: 0.2, restitution: 0.3 };
+
+        // Initialize Engine
+        function initEngine() {
+            // Create engine with slightly custom gravity
+            engine = Engine.create({
+                gravity: { y: 0.95, scale: 0.001 }
+            });
+            world = engine.world;
+
+            // Container Boundaries
+            const wallThickness = 60;
+            const ground = Bodies.rectangle(canvas.width / 2, canvas.height + wallThickness / 2 - 5, canvas.width, wallThickness, groundOptions);
+            const leftWall = Bodies.rectangle(-wallThickness / 2, canvas.height / 2, wallThickness, canvas.height * 2, wallOptions);
+            const rightWall = Bodies.rectangle(canvas.width + wallThickness / 2, canvas.height / 2, wallThickness, canvas.height * 2, wallOptions);
+
+            // Give labels to boundaries to prevent collision checks or tags
+            ground.label = 'boundary';
+            leftWall.label = 'boundary';
+            rightWall.label = 'boundary';
+
+            World.add(world, [ground, leftWall, rightWall]);
+
+            // Set up collision listener to handle merge
+            Events.on(engine, 'collisionStart', handleCollisions);
+        }
+
+        // --- GAME CYCLE ACTIONS ---
+
+        function generateNextFruit() {
+            // Next up is randomized from first 4 tiers (Cherry, Strawberry, Grape, Tangerine)
+            // This maintains the Suika strategy of only dropping small fruits.
+            return Math.floor(Math.random() * 4);
+        }
+
+        function cycleNextFruits() {
+            currentFruitIndex = nextFruitIndex;
+            nextFruitIndex = generateNextFruit();
+
+            // Update DOM
+            const nextFruit = FRUITS[nextFruitIndex];
+            document.getElementById('nextFruitEmoji').innerText = nextFruit.emoji;
+            document.getElementById('nextFruitName').innerText = nextFruit.name;
+            document.getElementById('mobileNextEmoji').innerText = nextFruit.emoji;
+            document.getElementById('mobileNextName').innerText = nextFruit.name;
+        }
+
+        function updateGuidePosition(x) {
+            // Keep dropping helper within walls
+            const r = FRUITS[currentFruitIndex].radius;
+            const minX = r + 4;
+            const maxX = canvas.width - r - 4;
+            activeDropperX = Math.max(minX, Math.min(x, maxX));
+            
+            // Reposition visible guide line
+            dropGuide.style.left = `${activeDropperX}px`;
+        }
+
+        function dropFruit() {
+            if (dropCooldown || isGameOver || !gameActive) return;
+
+            // Trigger cooldown to prevent spamming
+            dropCooldown = true;
+            playSynthSound('drop');
+
+            const currentFruit = FRUITS[currentFruitIndex];
+            
+            // Create standard circle body at droplet pointer
+            const x = activeDropperX;
+            const y = DANGER_Y - 40; // drop from slightly above the danger line
+            const body = Bodies.circle(x, y, currentFruit.radius, {
+                restitution: 0.25,
+                friction: 0.1,
+                density: 0.001,
+                label: 'fruit'
+            });
+
+            // Tag custom parameters to use inside Renderer
+            body.fruitTier = currentFruitIndex;
+            body.id = Math.random().toString(36).substring(2, 9);
+            body.isSettled = false; // Set to true after it collides
+
+            World.add(world, body);
+            spawnedBodies.push(body);
+
+            // Cycle to next item after small delay
+            setTimeout(() => {
+                cycleNextFruits();
+                dropCooldown = false;
+            }, 600);
+        }
+
+        // --- MERGING & COLLISION ---
+
+        function handleCollisions(event) {
+            const pairs = event.pairs;
+
+            for (let i = 0; i < pairs.length; i++) {
+                const pair = pairs[i];
+                const bodyA = pair.bodyA;
+                const bodyB = pair.bodyB;
+
+                // Mark bodies as settled once they hit anything
+                if (bodyA.label === 'fruit') bodyA.isSettled = true;
+                if (bodyB.label === 'fruit') bodyB.isSettled = true;
+
+                // Check if they are both fruits and of same tier
+                if (
+                    bodyA.label === 'fruit' && 
+                    bodyB.label === 'fruit' && 
+                    bodyA.fruitTier === bodyB.fruitTier &&
+                    !bodyA.toRemove && !bodyB.toRemove
+                ) {
+                    const currentTier = bodyA.fruitTier;
+                    
+                    // Mark to prevent double-merges in the same physics tick
+                    bodyA.toRemove = true;
+                    bodyB.toRemove = true;
+
+                    // Compute mid-point for new merged body
+                    const midX = (bodyA.position.x + bodyB.position.x) / 2;
+                    const midY = (bodyA.position.y + bodyB.position.y) / 2;
+
+                    // Perform merge in next tick
+                    setTimeout(() => {
+                        executeMerge(bodyA, bodyB, midX, midY, currentTier);
+                    }, 0);
+                }
+            }
+        }
+
+        function executeMerge(bodyA, bodyB, x, y, currentTier) {
+            // Remove old bodies from world
+            World.remove(world, bodyA);
+            World.remove(world, bodyB);
+
+            spawnedBodies = spawnedBodies.filter(b => b.id !== bodyA.id && b.id !== bodyB.id);
+
+            // Handle points accumulation
+            const baseScore = FRUITS[currentTier].score;
+            score += baseScore * 2;
+            document.getElementById('scoreVal').innerText = score;
+
+            // Trigger score popup / animation on canvas
+            createParticles(x, y, FRUITS[currentTier].color, currentTier);
+
+            // Determine next evolved state
+            const nextTier = currentTier + 1;
+            playSynthSound('merge', nextTier);
+
+            // Check if we evolved past watermelon
+            if (nextTier >= FRUITS.length) {
+                // Maximum tier watermelon merged - clear and award bonus
+                score += 500;
+                document.getElementById('scoreVal').innerText = score;
+                return;
+            }
+
+            // Create new body at midpoint
+            const nextFruit = FRUITS[nextTier];
+            const mergedBody = Bodies.circle(x, y, nextFruit.radius, {
+                restitution: 0.3,
+                friction: 0.1,
+                density: 0.001,
+                label: 'fruit'
+            });
+
+            mergedBody.fruitTier = nextTier;
+            mergedBody.id = Math.random().toString(36).substring(2, 9);
+            mergedBody.isSettled = true;
+
+            World.add(world, mergedBody);
+            spawnedBodies.push(mergedBody);
+        }
+
+        // --- COSMETIC EFFECTS & PARTICLES ---
+
+        function createParticles(x, y, color, tier) {
+            const count = 12 + tier * 2;
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 5;
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: 3 + Math.random() * 5,
+                    color: color,
+                    alpha: 1,
+                    decay: 0.02 + Math.random() * 0.03
+                });
+            }
+        }
+
+        function updateAndDrawParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= p.decay;
+
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                } else {
+                    ctx.save();
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+        }
+
+        // --- GAME OVER CONDITIONS ---
+
+        function checkDangerZone(deltaTime) {
+            if (isGameOver) return;
+
+            let isAnyViolating = false;
+
+            spawnedBodies.forEach(body => {
+                // If a settled body is floating higher than the danger threshold
+                if (body.isSettled && body.position.y - FRUITS[body.fruitTier].radius < DANGER_Y) {
+                    isAnyViolating = true;
+                    
+                    // Keep track of how long this body violates the line
+                    let timeViolating = dangerTimerMap.get(body.id) || 0;
+                    timeViolating += deltaTime;
+                    dangerTimerMap.set(body.id, timeViolating);
+
+                    // If a fruit crosses danger for more than 2 full seconds, Game Over
+                    if (timeViolating > 2000) {
+                        triggerGameOver();
+                    }
+                } else {
+                    // Reset counter if it drops back down
+                    dangerTimerMap.delete(body.id);
+                }
+            });
+
+            // Visual flashing warning on Danger Line if violations exist
+            const line = document.getElementById('dangerLine');
+            if (isAnyViolating) {
+                line.classList.add('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.8)]');
+                line.style.borderColor = 'rgba(239, 68, 68, 1)';
+            } else {
+                line.classList.remove('shadow-[0_0_15px_rgba(239,68,68,0.8)]');
+                line.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+            }
+        }
+
+        function triggerGameOver() {
+            isGameOver = true;
+            gameActive = false;
+            playSynthSound('gameover');
+
+            // Save highscore
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('fruitPop_bestScore', highScore);
+                document.getElementById('highScoreVal').innerText = highScore;
+            }
+
+            // Display overlay UI
+            document.getElementById('finalScore').innerText = score;
+            document.getElementById('finalBest').innerText = highScore;
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+            document.getElementById('gameOverScreen').classList.add('flex');
+        }
+
+        // --- CUSTOM RENDERING ---
+
+        let lastTime = 0;
+
+        function runGameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            // Clear frame
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Step Physics
+            if (gameActive && !isGameOver) {
+                Engine.update(engine, Math.min(deltaTime, 30));
+                checkDangerZone(deltaTime);
+            }
+
+            // Draw Background Grids & Spaceship-style panels on Canvas
+            drawAtmosphere();
+
+            // Render Active Dropper Fruit (Faded indicator at top)
+            if (gameActive && !dropCooldown && !isGameOver) {
+                const currentFruit = FRUITS[currentFruitIndex];
+                ctx.save();
+                ctx.globalAlpha = 0.55;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = currentFruit.glow;
+                
+                // Draw Outer Circle
+                ctx.beginPath();
+                ctx.arc(activeDropperX, DANGER_Y - 40, currentFruit.radius, 0, Math.PI * 2);
+                ctx.fillStyle = currentFruit.color;
+                ctx.fill();
+                ctx.strokeStyle = "rgba(255,255,255,0.4)";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Draw emoji
+                ctx.font = `${currentFruit.radius * 1.1}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.globalAlpha = 0.8;
+                ctx.fillText(currentFruit.emoji, activeDropperX, DANGER_Y - 40);
+                ctx.restore();
+            }
+
+            // Draw Physics Bodies (Fruits)
+            spawnedBodies.forEach(body => {
+                const tier = body.fruitTier;
+                const fruit = FRUITS[tier];
+                
+                ctx.save();
+                ctx.translate(body.position.x, body.position.y);
+                ctx.rotate(body.angle);
+
+                // Glow Effect
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = fruit.glow;
+
+                // Sphere Gradient Shading
+                const grad = ctx.createRadialGradient(-fruit.radius/4, -fruit.radius/4, fruit.radius/8, 0, 0, fruit.radius);
+                grad.addColorStop(0, '#ffffff');
+                grad.addColorStop(0.3, fruit.glow);
+                grad.addColorStop(1, '#0f172a');
+
+                ctx.beginPath();
+                ctx.arc(0, 0, fruit.radius, 0, Math.PI * 2);
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                // Glowing Stroke Outline
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                // Draw central fruit emoji
+                ctx.font = `${fruit.radius * 1.1}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.shadowBlur = 0; // Turn off glow for emoji itself
+                ctx.fillText(fruit.emoji, 0, 0);
+
+                ctx.restore();
+            });
+
+            // Particles Burst update
+            updateAndDrawParticles();
+
+            // Keep requestAnimationFrame going
+            requestAnimationFrame(runGameLoop);
+        }
+
+        function drawAtmosphere() {
+            // Gradient atmosphere light on bottom
+            const bottomGrad = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - 100);
+            bottomGrad.addColorStop(0, "rgba(99, 102, 241, 0.08)");
+            bottomGrad.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.fillStyle = bottomGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Gridlines
+            ctx.strokeStyle = "rgba(99, 102, 241, 0.03)";
+            ctx.lineWidth = 1;
+            const gridSize = 40;
+            for (let x = 0; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+
+        // --- CONTROLS / INTERACTION ---
+
+        function setupControls() {
+            // Mouse controls
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                updateGuidePosition(mouseX);
+            });
+
+            canvas.addEventListener('mousedown', (e) => {
+                dropFruit();
+            });
+
+            // Touch / Mobile Controls
+            canvas.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 0) return;
+                const rect = canvas.getBoundingClientRect();
+                const touchX = e.touches[0].clientX - rect.left;
+                updateGuidePosition(touchX);
+                e.preventDefault(); // Prevents bounce/scroll
+            }, { passive: false });
+
+            canvas.addEventListener('touchend', (e) => {
+                dropFruit();
+                e.preventDefault();
+            }, { passive: false });
+        }
+
+        // --- GAME CONTROL ACTIONS ---
+
+        function startNewGame() {
+            playSynthSound('click');
+            
+            // Clear prior engine if it exists
+            if (engine) {
+                World.clear(world);
+                Engine.clear(engine);
+            }
+
+            // Reset States
+            score = 0;
+            document.getElementById('scoreVal').innerText = score;
+            spawnedBodies = [];
+            particles = [];
+            dangerTimerMap.clear();
+            isGameOver = false;
+
+            // Initialize game parts
+            initEngine();
+            nextFruitIndex = generateNextFruit();
+            cycleNextFruits();
+
+            gameActive = true;
+            
+            // Hide UI overlays
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+        }
+
+        // --- BOOTSTRAP INITIALIZATION ---
+
+        window.onload = function() {
+            // Setup events
+            document.getElementById('startGameBtn').addEventListener('click', startNewGame);
+            document.getElementById('restartGameBtn').addEventListener('click', startNewGame);
+
+            setupControls();
+
+            // Run central rendering loops
+            requestAnimationFrame(runGameLoop);
+        };
+
+    </script>
+</body>
+</html>
